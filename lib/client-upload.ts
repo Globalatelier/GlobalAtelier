@@ -45,7 +45,15 @@ export async function uploadNamedImages(
   return { uploaded, failed };
 }
 
-async function uploadSignature() {
+type UploadSignature = {
+  timestamp: number;
+  signature: string;
+  folder: string;
+  apiKey: string;
+  cloudName: string;
+};
+
+async function uploadSignature(): Promise<UploadSignature> {
   const response = await fetch("/api/upload", { method: "POST" });
   const signature = (await response.json()) as {
     error?: string;
@@ -56,29 +64,32 @@ async function uploadSignature() {
     cloudName?: string;
   };
 
-  if (!response.ok || !signature.cloudName || !signature.apiKey || !signature.signature) {
+  if (
+    !response.ok ||
+    typeof signature.timestamp !== "number" ||
+    !signature.cloudName ||
+    !signature.apiKey ||
+    !signature.signature
+  ) {
     throw new Error(signature.error || "Upload ist gerade nicht möglich.");
   }
 
-  return signature;
+  return {
+    timestamp: signature.timestamp,
+    signature: signature.signature,
+    folder: signature.folder ?? "global-atelier",
+    apiKey: signature.apiKey,
+    cloudName: signature.cloudName,
+  };
 }
 
-async function uploadOne(
-  signature: {
-    timestamp?: number;
-    signature: string;
-    folder?: string;
-    apiKey: string;
-    cloudName: string;
-  },
-  file: File,
-) {
+async function uploadOne(signature: UploadSignature, file: File) {
   const body = new FormData();
   body.append("file", file);
   body.append("api_key", signature.apiKey);
   body.append("timestamp", String(signature.timestamp));
   body.append("signature", signature.signature);
-  body.append("folder", signature.folder ?? "global-atelier");
+  body.append("folder", signature.folder);
 
   try {
     const response = await fetch(
