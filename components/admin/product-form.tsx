@@ -125,9 +125,8 @@ export function ProductForm({
 
   return (
     <form onSubmit={onSubmit} className="max-w-xl space-y-8">
-      <Field label="Name" required>
+      <Field label="Name" hint="Kann leer bleiben.">
         <input
-          required
           value={name}
           onChange={(event) => setName(event.target.value)}
           className={inputClass}

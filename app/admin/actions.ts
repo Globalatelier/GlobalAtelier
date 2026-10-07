@@ -302,7 +302,8 @@ function productWriteError(error: { message?: string; code?: string } | null) {
     error?.code === "PGRST204" ||
     error?.code === "42703" ||
     message.includes("original_price") ||
-    message.includes("manufacturer_url")
+    message.includes("manufacturer_url") ||
+    message.includes("products_name_check")
   ) {
     return "Die Datenbank braucht ein Update. Führe supabase/schema.sql im Supabase SQL Editor erneut aus.";
   }

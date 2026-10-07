@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { deleteProduct } from "@/app/admin/actions";
 import { PriceDisplay } from "@/components/price-display";
+import { productTitle } from "@/lib/format";
 import { productImage } from "@/lib/images";
 import type { Product } from "@/types";
 
@@ -42,7 +43,7 @@ export function ProductTable({ products }: { products: Product[] }) {
             </div>
             <div className="min-w-0 md:contents">
               <div className="min-w-0">
-                <p className="truncate text-sm">{product.name}</p>
+                <p className="truncate text-sm">{productTitle(product.name)}</p>
                 <p className="mt-1 text-[11px] tracking-[0.12em] text-neutral-500 md:hidden">
                   {product.sku}
                 </p>
@@ -59,7 +60,7 @@ export function ProductTable({ products }: { products: Product[] }) {
                 <Link href={`/admin/products/${product.id}`} className="text-[11px] uppercase tracking-[0.14em]">
                   Bearbeiten
                 </Link>
-                <DeleteProductButton id={product.id} name={product.name} />
+                <DeleteProductButton id={product.id} name={productTitle(product.name)} />
               </div>
             </div>
           </li>

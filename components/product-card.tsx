@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CardPurchase } from "@/components/card-purchase";
 import { PriceDisplay } from "@/components/price-display";
 import { ProductImageView } from "@/components/product-image";
+import { productTitle } from "@/lib/format";
 import { safeExternalUrl } from "@/lib/site";
 import type { Product } from "@/types";
 
@@ -12,6 +13,7 @@ export function ProductCard({
   product: Product;
   priority?: boolean;
 }) {
+  const title = productTitle(product.name);
   const image = product.images[0]?.url ?? null;
   const manufacturerUrl = product.manufacturerUrl
     ? safeExternalUrl(product.manufacturerUrl)
@@ -24,7 +26,7 @@ export function ProductCard({
           {image ? (
             <ProductImageView
               url={image}
-              alt={product.name}
+              alt={title}
               sizes="(max-width: 768px) 50vw, 25vw"
               width={900}
               priority={priority}
@@ -33,13 +35,13 @@ export function ProductCard({
           ) : (
             <div className="flex h-full items-end p-3">
               <span className="font-serif text-2xl uppercase tracking-[0.08em] text-neutral-400">
-                {product.name}
+                {title}
               </span>
             </div>
           )}
         </div>
         <div className="pt-3">
-          <h2 className="text-[13px] leading-snug tracking-[0.04em]">{product.name}</h2>
+          <h2 className="text-[13px] leading-snug tracking-[0.04em]">{title}</h2>
           <p className="mt-1 text-[11px] tracking-[0.14em] text-neutral-500">{product.sku}</p>
           <PriceDisplay
             price={product.price}

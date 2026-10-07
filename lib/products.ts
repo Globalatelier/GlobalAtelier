@@ -87,7 +87,6 @@ export function sanitizeProductInput(
 ): { data: ProductInput } | { error: string } {
   const name = input.name.trim();
 
-  if (name.length < 2) return { error: "Bitte einen Produktnamen angeben." };
   if (name.length > 160) return { error: "Der Produktname ist zu lang." };
 
   let price: number | null = null;

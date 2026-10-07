@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductForm } from "@/components/admin/product-form";
+import { productTitle } from "@/lib/format";
 import { getFacets, getProducts } from "@/lib/products";
 
 type PageProps = {
@@ -27,7 +28,7 @@ export default async function EditProductPage({ params }: PageProps) {
       <p className="mt-6 text-[11px] uppercase tracking-[0.18em] text-neutral-500">Artikelnummer</p>
       <h1 className="mt-2 font-serif text-5xl tracking-[0.06em]">{product.sku}</h1>
       <p className="mt-3 max-w-xl text-sm text-neutral-500">
-        {product.name}. Die Artikelnummer bleibt beim Bearbeiten bestehen.
+        {productTitle(product.name)}. Die Artikelnummer bleibt beim Bearbeiten bestehen.
       </p>
       <div className="mt-10">
         <ProductForm product={product} categories={facets.categories} brands={facets.brands} />

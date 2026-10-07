@@ -6,13 +6,24 @@ import { PriceDisplay } from "@/components/price-display";
 import { ProductImageView } from "@/components/product-image";
 import { useCart } from "@/components/cart-provider";
 import { formatPrice } from "@/lib/format";
-import { buildWhatsappUrl } from "@/lib/whatsapp";
+import { buildWhatsappUrl, whatsappDigits } from "@/lib/whatsapp";
 import type { ShopSettings } from "@/types";
 
 export function CartView({ settings }: { settings: ShopSettings }) {
   const { items, setQuantity, removeItem, clear } = useCart();
   const [confirmClear, setConfirmClear] = useState(false);
-  const whatsappUrl = buildWhatsappUrl(settings.whatsappNumber, settings.shopName, items);
+  function openWhatsapp() {
+    const url = buildWhatsappUrl(
+      settings.whatsappNumber,
+      settings.shopName,
+      items,
+      window.location.origin,
+    );
+
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  const canOrder = whatsappDigits(settings.whatsappNumber).length >= 8 && items.length > 0;
   const allPriced = items.length > 0 && items.every((item) => item.price != null);
   const total = items.reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0);
 
@@ -110,15 +121,14 @@ export function CartView({ settings }: { settings: ShopSettings }) {
                 <span className="text-sm">{formatPrice(total)}</span>
               </div>
             ) : null}
-            {whatsappUrl ? (
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            {canOrder ? (
+              <button
+                type="button"
+                onClick={openWhatsapp}
                 className="inline-flex h-12 w-full items-center justify-center bg-black px-6 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-neutral-800"
               >
                 Über WhatsApp bestellen
-              </a>
+              </button>
             ) : (
               <button
                 type="button"
@@ -128,7 +138,7 @@ export function CartView({ settings }: { settings: ShopSettings }) {
                 Über WhatsApp bestellen
               </button>
             )}
-            {whatsappUrl ? (
+            {canOrder ? (
               <p className="mt-3 text-sm leading-relaxed text-neutral-500">
                 Es wird eine Anfrage geöffnet. Es gibt keine Online-Zahlung.
               </p>

@@ -51,7 +51,7 @@ export function ProductImport() {
     const parsed = parseProductImport(await file.text());
 
     setRows(parsed.rows);
-    setIssues(parsed.errors);
+    setIssues(parsed.warnings);
     setFileError(parsed.error);
   }
 
@@ -170,8 +170,8 @@ export function ProductImport() {
     <form onSubmit={onSubmit} className="max-w-2xl">
       <p className="max-w-xl text-sm leading-relaxed text-neutral-600">
         Ein Ordner für alles. Darin die CSV und pro Artikel ein Unterordner mit dem Produktnamen.
-        In den Unterordner kommen die eigenen Fotos, der Dateiname ist egal. Bis zu 600 Artikel,
-        acht Fotos pro Artikel. Das erste Foto nach Dateiname ist das Hauptbild.
+        Jedes Feld kann leer bleiben. Fotos werden nur zugeordnet, wenn der Unterordner so heißt
+        wie der Artikel. Bis zu 600 Artikel, acht Fotos pro Artikel.
       </p>
       <p className="mt-4 text-[11px] uppercase leading-relaxed tracking-[0.14em] text-neutral-500">
         Name, Originalpreis, Unser Preis, Herstellerlink, Marke, Kategorie, Größen, Verfügbar
@@ -214,12 +214,12 @@ export function ProductImport() {
         <div className="mt-8">
           <p className="text-sm">
             {rows.length} Artikel bereit, {withImages} mit Bildern
-            {issues.length > 0 ? `, ${issues.length} Zeilen werden übersprungen` : ""}.
+            {issues.length > 0 ? `, ${issues.length} Hinweise` : ""}.
           </p>
           <ul className="mt-4 border-t border-neutral-200">
             {rows.slice(0, 8).map((row, index) => (
               <li key={row.row} className="flex items-baseline justify-between gap-4 border-b border-neutral-200 py-3 text-sm">
-                <span className="truncate">{row.name}</span>
+                <span className="truncate">{row.name || "Ohne Namen"}</span>
                 <span className="shrink-0 text-neutral-500">
                   {plan.plans[index]?.files.length ?? 0} Bilder
                 </span>

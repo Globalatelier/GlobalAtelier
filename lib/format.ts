@@ -1,3 +1,9 @@
+export function productTitle(name: string) {
+  const trimmed = name.trim();
+
+  return trimmed || "Ohne Namen";
+}
+
 export function formatPrice(price: number | null | undefined) {
   if (price == null || Number.isNaN(price)) return null;
 

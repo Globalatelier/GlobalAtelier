@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PriceDisplay } from "@/components/price-display";
 import { ProductGallery } from "@/components/product-gallery";
 import { ProductPurchase } from "@/components/product-purchase";
-import { formatPriceLabel, showsOriginalPrice } from "@/lib/format";
+import { formatPriceLabel, productTitle, showsOriginalPrice } from "@/lib/format";
 import { productImage } from "@/lib/images";
 import { getProductBySlug } from "@/lib/products";
 import { safeExternalUrl } from "@/lib/site";
@@ -19,6 +19,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!product) return { title: "Nicht gefunden" };
 
+  const title = productTitle(product.name);
   const priceText = showsOriginalPrice(product.price, product.originalPrice)
     ? `${formatPriceLabel(product.price)} statt ${formatPriceLabel(product.originalPrice)}`
     : formatPriceLabel(product.price);
@@ -27,16 +28,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     .join(" · ");
 
   return {
-    title: product.name,
-    description: `${product.name}. ${description}`,
+    title,
+    description: `${title}. ${description}`,
     openGraph: {
-      title: product.name,
-      description: `${product.name}. ${description}`,
+      title,
+      description: `${title}. ${description}`,
       images: product.images[0]
         ? [
             {
               url: productImage(product.images[0].url, 1200, "limit"),
-              alt: product.name,
+              alt: title,
             },
           ]
         : [],
@@ -50,19 +51,20 @@ export default async function ProductPage({ params }: PageProps) {
 
   if (!product) notFound();
 
+  const title = productTitle(product.name);
   const manufacturerUrl = product.manufacturerUrl
     ? safeExternalUrl(product.manufacturerUrl)
     : null;
 
   return (
     <article className="mx-auto grid max-w-[1440px] gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:gap-16 lg:px-10 lg:py-12">
-      <ProductGallery images={product.images} name={product.name} />
+      <ProductGallery images={product.images} name={title} />
       <div className="lg:sticky lg:top-24 lg:self-start">
         <Link href="/" className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">
           Katalog
         </Link>
         <h1 className="mt-5 font-serif text-[2.6rem] uppercase leading-[0.9] tracking-[0.03em] md:text-6xl">
-          {product.name}
+          {title}
         </h1>
         <p className="mt-4 text-[11px] tracking-[0.16em] text-neutral-500">{product.sku}</p>
         <PriceDisplay

@@ -190,7 +190,7 @@ grant execute on function private.touch_settings() to authenticated;
 
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
-  name text not null check (char_length(btrim(name)) > 0),
+  name text not null default '' check (char_length(name) <= 160),
   slug text not null unique,
   sku text not null unique,
   price numeric(12, 2) check (price is null or price >= 0),
@@ -208,6 +208,23 @@ create table if not exists public.products (
 
 alter table public.products add column if not exists original_price numeric(12, 2);
 alter table public.products add column if not exists manufacturer_url text;
+alter table public.products alter column name set default '';
+alter table public.products drop constraint if exists products_name_check;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'products_name_length_check'
+      and conrelid = 'public.products'::regclass
+  ) then
+    alter table public.products
+      add constraint products_name_length_check
+      check (char_length(name) <= 160);
+  end if;
+end
+$$;
 
 do $$
 begin

@@ -57,12 +57,13 @@ type Field = (typeof HEADER_FIELDS)[keyof typeof HEADER_FIELDS];
 export function parseProductImport(text: string): {
   rows: ImportDraft[];
   errors: ImportIssue[];
+  warnings: ImportIssue[];
   error: string | null;
 } {
   const table = parseCsv(text);
 
   if (table.length === 0) {
-    return { rows: [], errors: [], error: "Die Datei ist leer." };
+    return { rows: [], errors: [], warnings: [], error: "Die Datei ist leer." };
   }
 
   const header = table[0].map(normalizeHeader);
@@ -74,11 +75,12 @@ export function parseProductImport(text: string): {
     if (field && !columns.has(field)) columns.set(field, index);
   });
 
-  if (!columns.has("name")) {
+  if (columns.size === 0) {
     return {
       rows: [],
       errors: [],
-      error: "Die erste Zeile braucht die Spalte Name.",
+      warnings: [],
+      error: "Die erste Zeile enthält keine bekannte Spalte.",
     };
   }
 
@@ -88,58 +90,80 @@ export function parseProductImport(text: string): {
     return {
       rows: [],
       errors: [],
+      warnings: [],
       error: "Maximal 600 Produkte pro Datei.",
     };
   }
 
   const rows: ImportDraft[] = [];
   const errors: ImportIssue[] = [];
+  const warnings: ImportIssue[] = [];
 
   dataRows.forEach((cells, index) => {
     const row = index + 2;
-    const name = cell(cells, columns.get("name")).trim();
+    const label = cell(cells, columns.get("name")).trim() || `Zeile ${row}`;
+    let name = cell(cells, columns.get("name")).trim();
 
-    if (!name) {
-      errors.push({ row, message: "Der Name fehlt." });
-      return;
+    if (name.length > 160) {
+      warnings.push({ row, message: `„${label}“ hat einen zu langen Namen. Er wird gekürzt.` });
+      name = name.slice(0, 160).trim();
     }
 
-    const price = parseMoney(cell(cells, columns.get("price")));
-    const originalPrice = parseMoney(cell(cells, columns.get("originalPrice")));
+    const parsedPrice = parseMoney(cell(cells, columns.get("price")));
+    const parsedOriginal = parseMoney(cell(cells, columns.get("originalPrice")));
+    const price = parsedPrice === "invalid" ? null : parsedPrice;
+    const originalPrice = parsedOriginal === "invalid" ? null : parsedOriginal;
 
-    if (price === "invalid") {
-      errors.push({ row, message: `„${name}“ hat einen ungültigen Preis.` });
-      return;
+    if (parsedPrice === "invalid") {
+      warnings.push({ row, message: `„${label}“ hat einen unlesbaren Preis. Das Feld bleibt leer.` });
     }
 
-    if (originalPrice === "invalid") {
-      errors.push({ row, message: `„${name}“ hat einen ungültigen Originalpreis.` });
-      return;
+    if (parsedOriginal === "invalid") {
+      warnings.push({ row, message: `„${label}“ hat einen unlesbaren Originalpreis. Das Feld bleibt leer.` });
     }
 
     const manufacturerRaw = cell(cells, columns.get("manufacturerUrl"));
     const manufacturerUrl = manufacturerRaw ? safeExternalUrl(manufacturerRaw) : null;
 
     if (manufacturerRaw && !manufacturerUrl) {
-      errors.push({
+      warnings.push({
         row,
-        message: `„${name}“ braucht einen Herstellerlink mit http:// oder https://.`,
+        message: `„${label}“ hat einen Herstellerlink ohne http:// oder https://. Das Feld bleibt leer.`,
       });
-      return;
     }
 
-    const available = parseAvailable(cell(cells, columns.get("available")));
+    const parsedAvailable = parseAvailable(cell(cells, columns.get("available")));
+    const available = parsedAvailable === "invalid" ? true : parsedAvailable;
 
-    if (available === "invalid") {
-      errors.push({ row, message: `„${name}“ hat einen ungültigen Wert bei verfuegbar.` });
-      return;
+    if (parsedAvailable === "invalid") {
+      warnings.push({ row, message: `„${label}“ hat einen unlesbaren Verfügbar-Wert. Es gilt verfügbar.` });
     }
 
-    const rawImages = splitImages(cell(cells, columns.get("imageUrls")));
-    const invalidImage = rawImages.find((value) => imageRefProblem(value));
+    const rawImages = splitImages(cell(cells, columns.get("imageUrls"))).filter((value) => {
+      if (!imageRefProblem(value)) return true;
 
-    if (invalidImage) {
-      errors.push({ row, message: `„${name}“ enthält einen ungültigen Bildeintrag.` });
+      warnings.push({ row, message: `„${label}“ enthält einen ungültigen Bildeintrag. Er wird ausgelassen.` });
+      return false;
+    });
+    const brand = optionalText(cell(cells, columns.get("brand")));
+    const category = optionalText(cell(cells, columns.get("category")));
+    const sizes = splitSizes(cell(cells, columns.get("sizes")));
+    const hasContent = Boolean(
+      name ||
+        price != null ||
+        originalPrice != null ||
+        brand ||
+        category ||
+        sizes.length ||
+        manufacturerUrl ||
+        rawImages.length,
+    );
+
+    if (!hasContent) {
+      if (cells.some((value) => value.trim())) {
+        warnings.push({ row, message: "Die Zeile enthält keine verwertbaren Angaben." });
+      }
+
       return;
     }
 
@@ -148,20 +172,20 @@ export function parseProductImport(text: string): {
       name,
       price,
       originalPrice,
-      brand: optionalText(cell(cells, columns.get("brand"))),
-      category: optionalText(cell(cells, columns.get("category"))),
-      sizes: splitSizes(cell(cells, columns.get("sizes"))),
+      brand,
+      category,
+      sizes,
       manufacturerUrl,
       imageUrls: rawImages,
       available,
     });
   });
 
-  if (rows.length === 0 && errors.length === 0) {
-    return { rows, errors, error: "Die Datei enthält keine Produkte." };
+  if (rows.length === 0 && warnings.length === 0) {
+    return { rows, errors, warnings, error: "Die Datei enthält keine Produkte." };
   }
 
-  return { rows, errors, error: null };
+  return { rows, errors, warnings, error: null };
 }
 
 function parseCsv(text: string) {

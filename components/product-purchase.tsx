@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useCart } from "@/components/cart-provider";
 import { useToast } from "@/components/toast";
+import { productTitle } from "@/lib/format";
 import type { Product } from "@/types";
 
 export function ProductPurchase({ product }: { product: Product }) {
@@ -23,7 +24,7 @@ export function ProductPurchase({ product }: { product: Product }) {
     addItem({
       productId: product.id,
       slug: product.slug,
-      name: product.name,
+      name: productTitle(product.name),
       sku: product.sku,
       image: product.images[0]?.url ?? null,
       size,
