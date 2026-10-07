@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), "Times New Roman", serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #fff;
+  color: #111;
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #111;
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 1px solid #111;
+  outline-offset: 3px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+dialog {
+  margin: auto;
+  max-width: calc(100vw - 2rem);
+  border: 0;
+  padding: 0;
+  background: #fff;
+}
+
+dialog::backdrop {
+  background: rgb(17 17 17 / 46%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .image-zoom {
+    transition: none;
+  }
+}
