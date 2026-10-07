@@ -1,5 +1,6 @@
 import { parseMoney } from "@/lib/money";
 import { safeExternalUrl } from "@/lib/site";
+import type { ProductImage } from "@/types";
 
 export type ImportDraft = {
   row: number;
@@ -11,6 +12,7 @@ export type ImportDraft = {
   sizes: string[];
   manufacturerUrl: string | null;
   imageUrls: string[];
+  images?: ProductImage[];
   available: boolean;
 };
 
@@ -82,11 +84,11 @@ export function parseProductImport(text: string): {
 
   const dataRows = table.slice(1);
 
-  if (dataRows.length > 200) {
+  if (dataRows.length > 600) {
     return {
       rows: [],
       errors: [],
-      error: "Maximal 200 Produkte pro Datei. Teile die Datei auf.",
+      error: "Maximal 600 Produkte pro Datei.",
     };
   }
 
@@ -133,13 +135,11 @@ export function parseProductImport(text: string): {
       return;
     }
 
-    const imageUrls = splitImages(cell(cells, columns.get("imageUrls"))).filter((url) => {
-      return safeExternalUrl(url) != null;
-    });
     const rawImages = splitImages(cell(cells, columns.get("imageUrls")));
+    const invalidImage = rawImages.find((value) => imageRefProblem(value));
 
-    if (rawImages.some((url) => safeExternalUrl(url) == null)) {
-      errors.push({ row, message: `„${name}“ enthält einen ungültigen Bildlink.` });
+    if (invalidImage) {
+      errors.push({ row, message: `„${name}“ enthält einen ungültigen Bildeintrag.` });
       return;
     }
 
@@ -152,7 +152,7 @@ export function parseProductImport(text: string): {
       category: optionalText(cell(cells, columns.get("category"))),
       sizes: splitSizes(cell(cells, columns.get("sizes"))),
       manufacturerUrl,
-      imageUrls,
+      imageUrls: rawImages,
       available,
     });
   });
@@ -259,6 +259,119 @@ function splitSizes(value: string) {
     .split(/\s*[,|/\n]\s*/)
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+export type LocalImageFile = {
+  key: string;
+  name: string;
+  directory: string;
+};
+
+export function planLocalImages(rows: ImportDraft[], files: LocalImageFile[]) {
+  const byName = new Map<string, LocalImageFile[]>();
+
+  files.forEach((file) => {
+    [normalizeFile(file.name), normalizeFile(stripExtension(file.name))].forEach((key) => {
+      const list = byName.get(key) ?? [];
+      list.push(file);
+      byName.set(key, list);
+    });
+  });
+
+  const byDirectory = new Map<string, LocalImageFile[]>();
+
+  files.forEach((file) => {
+    const key = normalizeFile(file.directory);
+
+    if (!key) return;
+
+    const list = byDirectory.get(key) ?? [];
+    list.push(file);
+    byDirectory.set(key, list);
+  });
+
+  const used = new Set<string>();
+
+  const plans = rows.map((row) => {
+    const urls = row.imageUrls.filter((value) => safeExternalUrl(value));
+    const names = row.imageUrls.filter((value) => !safeExternalUrl(value));
+    const chosen: LocalImageFile[] = [];
+    const missing: string[] = [];
+
+    const take = (file: LocalImageFile | undefined) => {
+      if (!file || chosen.some((item) => item.key === file.key)) return;
+
+      chosen.push(file);
+      used.add(file.key);
+    };
+
+    if (names.length > 0) {
+      names.forEach((name) => {
+        const match =
+          byName.get(normalizeFile(name))?.[0] ??
+          byName.get(normalizeFile(stripExtension(name)))?.[0];
+
+        if (!match) missing.push(name);
+        else take(match);
+      });
+    } else if (urls.length === 0) {
+      const folder = (byDirectory.get(normalizeFile(row.name)) ?? [])
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "de"));
+
+      if (folder.length > 0) folder.forEach(take);
+      else autoFiles(row.name, files).forEach(take);
+    }
+
+    return {
+      urls,
+      files: chosen.slice(0, 8).map((file) => file.key),
+      missing,
+    };
+  });
+
+  return {
+    plans,
+    unused: files.filter((file) => !used.has(file.key)).map((file) => file.name),
+  };
+}
+
+function autoFiles(productName: string, files: LocalImageFile[]) {
+  const key = normalizeFile(productName);
+
+  return files
+    .filter((file) => {
+      const base = normalizeFile(stripExtension(file.name));
+
+      return base === key || new RegExp(`^${escapeRegExp(key)}[-_ ]\\d+$`).test(base);
+    })
+    .sort((a, b) => {
+      const aExact = normalizeFile(stripExtension(a.name)) === key;
+      const bExact = normalizeFile(stripExtension(b.name)) === key;
+
+      if (aExact !== bExact) return aExact ? -1 : 1;
+
+      return a.name.localeCompare(b.name, "de");
+    });
+}
+
+function imageRefProblem(value: string) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return safeExternalUrl(value) ? null : "invalid";
+  if (!value || value.length > 180 || /[\\/]/.test(value)) return "invalid";
+
+  return null;
+}
+
+function stripExtension(value: string) {
+  return value.replace(/\.[a-z0-9]+$/i, "");
+}
+
+function normalizeFile(value: string) {
+  return value.trim().toLowerCase().normalize("NFC");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function splitImages(value: string) {

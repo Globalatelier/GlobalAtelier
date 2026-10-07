@@ -106,8 +106,8 @@ export async function importProducts(rows: ImportDraft[]) {
     return { error: "Die Datei enthält keine Produkte." };
   }
 
-  if (rows.length > 200) {
-    return { error: "Maximal 200 Produkte pro Import." };
+  if (rows.length > 80) {
+    return { error: "Maximal 80 Produkte pro Durchgang." };
   }
 
   const created: { row: number; name: string; sku: string }[] = [];
@@ -117,10 +117,14 @@ export async function importProducts(rows: ImportDraft[]) {
   for (const [index, row] of rows.entries()) {
     const name = typeof row?.name === "string" ? row.name : "Produkt";
     const rowNumber = typeof row?.row === "number" ? row.row : index + 2;
-    const imageUrls = Array.isArray(row.imageUrls) ? row.imageUrls.filter((url) => typeof url === "string") : [];
-    const images: ProductImage[] = [];
+    const provided = Array.isArray(row.images) ? row.images.filter(isProvidedImage) : [];
+    const imageUrls = Array.isArray(row.imageUrls)
+      ? row.imageUrls.filter((url) => typeof url === "string" && /^https?:\/\//i.test(url))
+      : [];
+    const images: ProductImage[] = [...provided];
+    const room = Math.max(0, 8 - images.length);
 
-    if (imageUrls.length > 8) {
+    if (provided.length + imageUrls.length > 8) {
       warnings.push({
         row: rowNumber,
         name,
@@ -128,7 +132,7 @@ export async function importProducts(rows: ImportDraft[]) {
       });
     }
 
-    for (const url of imageUrls.slice(0, 8)) {
+    for (const url of imageUrls.slice(0, room)) {
       const uploaded = await uploadRemoteImage(url);
 
       if ("error" in uploaded) {
@@ -278,6 +282,16 @@ async function removeImages(publicIds: string[]) {
         // The product change already succeeded. Image cleanup stays isolated.
       }
     }),
+  );
+}
+
+function isProvidedImage(value: ProductImage) {
+  return (
+    value != null &&
+    typeof value.publicId === "string" &&
+    typeof value.url === "string" &&
+    value.publicId.length > 0 &&
+    value.url.startsWith("https://")
   );
 }
 
