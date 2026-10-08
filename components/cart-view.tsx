@@ -56,7 +56,6 @@ export function CartView({ settings }: { settings: ShopSettings }) {
                     url={item.image}
                     alt=""
                     sizes="88px"
-                    width={240}
                   />
                 </Link>
                 <div className="min-w-0">

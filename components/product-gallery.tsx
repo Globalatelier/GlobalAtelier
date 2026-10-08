@@ -31,7 +31,6 @@ export function ProductGallery({
           url={active.url}
           alt={name}
           sizes="(max-width: 1024px) 100vw, 50vw"
-          width={1600}
           mode="limit"
           priority
           className="object-contain"
@@ -54,7 +53,6 @@ export function ProductGallery({
                   url={image.url}
                   alt=""
                   sizes="64px"
-                  width={200}
                   className="object-cover"
                 />
               </button>

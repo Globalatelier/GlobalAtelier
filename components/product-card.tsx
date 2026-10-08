@@ -27,8 +27,7 @@ export function ProductCard({
             <ProductImageView
               url={image}
               alt={title}
-              sizes="(max-width: 768px) 50vw, 25vw"
-              width={900}
+              sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
               priority={priority}
               className="image-zoom object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
             />
