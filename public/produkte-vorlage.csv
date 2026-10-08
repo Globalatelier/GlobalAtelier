@@ -1,2 +1,2 @@
-﻿Name;Originalpreis;Unser Preis;Herstellerlink;Marke;Kategorie;Größen;Verfügbar
-Jacke;249;199;https://www.hersteller.example;Moncler;Jacken;"S, M, L";ja
+﻿Name;Originalpreis;Unser Preis;Herstellerlink;Marke;Kategorie;Größen;Bilder;Verfügbar
+Jacke;249;199;https://www.hersteller.example;Moncler;Jacken;"S, M, L";"https://www.hersteller.example/jacke.jpg, https://www.hersteller.example/jacke-2.jpg";ja

@@ -1,18 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { importProducts } from "@/app/admin/actions";
-import { uploadNamedImages } from "@/lib/client-upload";
-import {
-  parseProductImport,
-  planLocalImages,
-  type ImportDraft,
-  type ImportIssue,
-  type LocalImageFile,
-} from "@/lib/import";
-
-type PickedImage = LocalImageFile & { file: File };
+import { parseProductImport, type ImportDraft, type ImportIssue } from "@/lib/import";
 
 type ImportResult = {
   created: { row: number; name: string; sku: string }[];
@@ -24,61 +15,33 @@ const BATCH = 40;
 
 export function ProductImport() {
   const router = useRouter();
-  const folderRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ImportDraft[]>([]);
   const [issues, setIssues] = useState<ImportIssue[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [imageFiles, setImageFiles] = useState<PickedImage[]>([]);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const plan = useMemo(
-    () => planLocalImages(rows, imageFiles),
-    [rows, imageFiles],
-  );
-  const withImages = plan.plans.filter((item) => item.files.length > 0 || item.urls.length > 0).length;
+  const withImages = rows.filter((row) => row.imageUrls.length > 0).length;
 
-  async function readSheet(file: File) {
+  async function onFile(file: File | null) {
     setRows([]);
     setIssues([]);
     setFileError(null);
     setError(null);
     setResult(null);
-    setFileName(file.name);
+    setFileName(file?.name ?? null);
+    if (fileRef.current) fileRef.current.value = "";
+
+    if (!file) return;
 
     const parsed = parseProductImport(await file.text());
 
     setRows(parsed.rows);
     setIssues(parsed.warnings);
     setFileError(parsed.error);
-  }
-
-  async function onFolder(list: FileList | null) {
-    const all = Array.from(list ?? []);
-    const sheets = all
-      .filter((file) => /\.csv$/i.test(file.name) && !file.name.startsWith("."))
-      .sort((a, b) => scoreSheet(b.name) - scoreSheet(a.name));
-    const images = all.filter(isImageFile).map((file) => ({
-      key: file.webkitRelativePath || file.name,
-      name: file.name,
-      directory: parentDirectory(file.webkitRelativePath || file.name),
-      file,
-    }));
-
-    setImageFiles(images);
-    if (folderRef.current) folderRef.current.value = "";
-
-    if (!sheets[0]) {
-      setRows([]);
-      setIssues([]);
-      setFileName(null);
-      setFileError("Im Ordner liegt keine CSV-Datei.");
-      return;
-    }
-
-    await readSheet(sheets[0]);
   }
 
   async function onSubmit(event: FormEvent) {
@@ -90,44 +53,13 @@ export function ProductImport() {
     setError(null);
     setUploadLabel(null);
 
-    const needed = new Set(plan.plans.flatMap((item) => item.files));
-    let uploaded = new Map<string, { publicId: string; url: string }>();
-    let failedUploads: string[] = [];
-
-    try {
-      const upload = await uploadNamedImages(
-        imageFiles.filter((file) => needed.has(file.key)).map((file) => ({ key: file.key, file: file.file })),
-        (done, total) => setUploadLabel(`Bilder ${done} von ${total}`),
-      );
-      uploaded = upload.uploaded;
-      failedUploads = upload.failed;
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Upload fehlgeschlagen.");
-      setPending(false);
-      setUploadLabel(null);
-      return;
-    }
-
-    const prepared = rows.map((row, index) => {
-      const item = plan.plans[index];
-
-      return {
-        ...row,
-        imageUrls: item?.urls ?? [],
-        images: (item?.files ?? []).flatMap((key) => {
-          const image = uploaded.get(key);
-          return image ? [image] : [];
-        }),
-      };
-    });
-
     const created: ImportResult["created"] = [];
     const failed: ImportResult["failed"] = [];
     const warnings: ImportResult["warnings"] = [];
 
-    for (let index = 0; index < prepared.length; index += BATCH) {
-      const slice = prepared.slice(index, index + BATCH);
-      setUploadLabel(`Artikel ${Math.min(index + BATCH, prepared.length)} von ${prepared.length}`);
+    for (let index = 0; index < rows.length; index += BATCH) {
+      const slice = rows.slice(index, index + BATCH);
+      setUploadLabel(`Artikel ${Math.min(index + BATCH, rows.length)} von ${rows.length}`);
       const response = await importProducts(slice);
 
       if ("error" in response && response.error && !("created" in response)) {
@@ -142,26 +74,12 @@ export function ProductImport() {
       }
     }
 
-    plan.plans.forEach((item, index) => {
-      item.missing.forEach((name) => {
-        warnings.push({
-          row: rows[index]?.row ?? index + 2,
-          name: rows[index]?.name ?? "Produkt",
-          message: `Datei „${name}“ fehlt im Ordner.`,
-        });
-      });
-    });
-    failedUploads.forEach((name) => {
-      warnings.push({ row: 0, name, message: "Das Bild konnte nicht hochgeladen werden." });
-    });
-
     setResult({ created, failed, warnings });
     setUploadLabel(null);
     setPending(false);
 
     if (created.length > 0) {
       setRows([]);
-      setImageFiles([]);
       router.refresh();
     }
   }
@@ -169,12 +87,12 @@ export function ProductImport() {
   return (
     <form onSubmit={onSubmit} className="max-w-2xl">
       <p className="max-w-xl text-sm leading-relaxed text-neutral-600">
-        Ein Ordner für alles. Darin die CSV und pro Artikel ein Unterordner mit dem Produktnamen.
-        Jedes Feld kann leer bleiben. Fotos werden nur zugeordnet, wenn der Unterordner so heißt
-        wie der Artikel. Bis zu 600 Artikel, acht Fotos pro Artikel.
+        Eine CSV-Datei. Jedes Feld kann leer bleiben. Bildlinks stehen in der Spalte Bilder,
+        mehrere Links mit Komma oder Senkrechtstrich trennen. Bis zu 600 Artikel, acht Bilder
+        pro Artikel. Der erste Link wird das Hauptbild.
       </p>
       <p className="mt-4 text-[11px] uppercase leading-relaxed tracking-[0.14em] text-neutral-500">
-        Name, Originalpreis, Unser Preis, Herstellerlink, Marke, Kategorie, Größen, Verfügbar
+        Name, Originalpreis, Unser Preis, Herstellerlink, Marke, Kategorie, Größen, Bilder, Verfügbar
       </p>
       <a
         href="/produkte-vorlage.csv"
@@ -184,44 +102,32 @@ export function ProductImport() {
         Vorlage herunterladen
       </a>
 
-      <div className="mt-10">
-        <button
-          type="button"
-          onClick={() => folderRef.current?.click()}
-          className="inline-flex h-11 items-center bg-black px-4 text-[11px] uppercase tracking-[0.16em] text-white"
-        >
-          Ordner auswählen
-        </button>
+      <label className="mt-10 block">
+        <span className="text-[11px] uppercase tracking-[0.16em] text-neutral-500">CSV-Datei</span>
         <input
-          ref={folderRef}
+          ref={fileRef}
           type="file"
-          multiple
-          className="sr-only"
-          onChange={(event) => void onFolder(event.target.files)}
-          {...{ webkitdirectory: "", directory: "" }}
+          accept=".csv,text/csv"
+          onChange={(event) => void onFile(event.target.files?.[0] ?? null)}
+          className="mt-3 block w-full text-sm"
         />
-      </div>
+      </label>
 
       {fileName ? <p className="mt-4 text-sm text-neutral-500">{fileName}</p> : null}
-      {imageFiles.length > 0 ? (
-        <p className="mt-2 text-sm text-neutral-500">
-          {imageFiles.length} {imageFiles.length === 1 ? "Bild" : "Bilder"} im Ordner
-        </p>
-      ) : null}
       {fileError ? <p className="mt-4 text-sm">{fileError}</p> : null}
 
       {rows.length > 0 ? (
         <div className="mt-8">
           <p className="text-sm">
-            {rows.length} Artikel bereit, {withImages} mit Bildern
+            {rows.length} Artikel bereit, {withImages} mit Bildlinks
             {issues.length > 0 ? `, ${issues.length} Hinweise` : ""}.
           </p>
           <ul className="mt-4 border-t border-neutral-200">
-            {rows.slice(0, 8).map((row, index) => (
+            {rows.slice(0, 8).map((row) => (
               <li key={row.row} className="flex items-baseline justify-between gap-4 border-b border-neutral-200 py-3 text-sm">
                 <span className="truncate">{row.name || "Ohne Namen"}</span>
                 <span className="shrink-0 text-neutral-500">
-                  {plan.plans[index]?.files.length ?? 0} Bilder
+                  {row.imageUrls.length} {row.imageUrls.length === 1 ? "Bild" : "Bilder"}
                 </span>
               </li>
             ))}
@@ -279,20 +185,4 @@ export function ProductImport() {
       </button>
     </form>
   );
-}
-
-function scoreSheet(name: string) {
-  if (/produkt|vorlage/i.test(name)) return 2;
-  if (/^import/i.test(name)) return 1;
-  return 0;
-}
-
-function isImageFile(file: File) {
-  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|avif)$/i.test(file.name);
-}
-
-function parentDirectory(path: string) {
-  const parts = path.split("/").filter(Boolean);
-
-  return parts.length > 1 ? parts[parts.length - 2] : "";
 }

@@ -139,11 +139,16 @@ export function parseProductImport(text: string): {
       warnings.push({ row, message: `„${label}“ hat einen unlesbaren Verfügbar-Wert. Es gilt verfügbar.` });
     }
 
-    const rawImages = splitImages(cell(cells, columns.get("imageUrls"))).filter((value) => {
-      if (!imageRefProblem(value)) return true;
+    const rawImages = splitImages(cell(cells, columns.get("imageUrls"))).flatMap((value) => {
+      const url = safeExternalUrl(value);
 
-      warnings.push({ row, message: `„${label}“ enthält einen ungültigen Bildeintrag. Er wird ausgelassen.` });
-      return false;
+      if (url) return [url];
+
+      warnings.push({
+        row,
+        message: `„${label}“ enthält einen Bildlink ohne http:// oder https://. Er wird ausgelassen.`,
+      });
+      return [];
     });
     const brand = optionalText(cell(cells, columns.get("brand")));
     const category = optionalText(cell(cells, columns.get("category")));
@@ -283,119 +288,6 @@ function splitSizes(value: string) {
     .split(/\s*[,|/\n]\s*/)
     .map((part) => part.trim())
     .filter(Boolean);
-}
-
-export type LocalImageFile = {
-  key: string;
-  name: string;
-  directory: string;
-};
-
-export function planLocalImages(rows: ImportDraft[], files: LocalImageFile[]) {
-  const byName = new Map<string, LocalImageFile[]>();
-
-  files.forEach((file) => {
-    [normalizeFile(file.name), normalizeFile(stripExtension(file.name))].forEach((key) => {
-      const list = byName.get(key) ?? [];
-      list.push(file);
-      byName.set(key, list);
-    });
-  });
-
-  const byDirectory = new Map<string, LocalImageFile[]>();
-
-  files.forEach((file) => {
-    const key = normalizeFile(file.directory);
-
-    if (!key) return;
-
-    const list = byDirectory.get(key) ?? [];
-    list.push(file);
-    byDirectory.set(key, list);
-  });
-
-  const used = new Set<string>();
-
-  const plans = rows.map((row) => {
-    const urls = row.imageUrls.filter((value) => safeExternalUrl(value));
-    const names = row.imageUrls.filter((value) => !safeExternalUrl(value));
-    const chosen: LocalImageFile[] = [];
-    const missing: string[] = [];
-
-    const take = (file: LocalImageFile | undefined) => {
-      if (!file || chosen.some((item) => item.key === file.key)) return;
-
-      chosen.push(file);
-      used.add(file.key);
-    };
-
-    if (names.length > 0) {
-      names.forEach((name) => {
-        const match =
-          byName.get(normalizeFile(name))?.[0] ??
-          byName.get(normalizeFile(stripExtension(name)))?.[0];
-
-        if (!match) missing.push(name);
-        else take(match);
-      });
-    } else if (urls.length === 0) {
-      const folder = (byDirectory.get(normalizeFile(row.name)) ?? [])
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "de"));
-
-      if (folder.length > 0) folder.forEach(take);
-      else autoFiles(row.name, files).forEach(take);
-    }
-
-    return {
-      urls,
-      files: chosen.slice(0, 8).map((file) => file.key),
-      missing,
-    };
-  });
-
-  return {
-    plans,
-    unused: files.filter((file) => !used.has(file.key)).map((file) => file.name),
-  };
-}
-
-function autoFiles(productName: string, files: LocalImageFile[]) {
-  const key = normalizeFile(productName);
-
-  return files
-    .filter((file) => {
-      const base = normalizeFile(stripExtension(file.name));
-
-      return base === key || new RegExp(`^${escapeRegExp(key)}[-_ ]\\d+$`).test(base);
-    })
-    .sort((a, b) => {
-      const aExact = normalizeFile(stripExtension(a.name)) === key;
-      const bExact = normalizeFile(stripExtension(b.name)) === key;
-
-      if (aExact !== bExact) return aExact ? -1 : 1;
-
-      return a.name.localeCompare(b.name, "de");
-    });
-}
-
-function imageRefProblem(value: string) {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return safeExternalUrl(value) ? null : "invalid";
-  if (!value || value.length > 180 || /[\\/]/.test(value)) return "invalid";
-
-  return null;
-}
-
-function stripExtension(value: string) {
-  return value.replace(/\.[a-z0-9]+$/i, "");
-}
-
-function normalizeFile(value: string) {
-  return value.trim().toLowerCase().normalize("NFC");
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function splitImages(value: string) {
