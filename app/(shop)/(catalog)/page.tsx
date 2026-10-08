@@ -1,4 +1,5 @@
 import { Catalog } from "@/components/catalog";
+import { OrderHero } from "@/components/order-hero";
 import { getProducts } from "@/lib/products";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -14,8 +15,8 @@ export default async function HomePage({
   ]);
 
   return (
-    <div className="pt-6 sm:pt-10">
-      <h1 className="sr-only">Katalog</h1>
+    <div>
+      <OrderHero />
       {configured ? (
         <Catalog
           products={catalog.products}
