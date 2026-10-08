@@ -68,14 +68,20 @@ export function parseProductImport(text: string): {
 
   const header = table[0].map(normalizeHeader);
   const columns = new Map<Field, number>();
+  const imageColumns: number[] = [];
 
   header.forEach((name, index) => {
+    if (isImageHeader(name)) {
+      imageColumns.push(index);
+      return;
+    }
+
     const field = HEADER_FIELDS[name as keyof typeof HEADER_FIELDS];
 
     if (field && !columns.has(field)) columns.set(field, index);
   });
 
-  if (columns.size === 0) {
+  if (columns.size === 0 && imageColumns.length === 0) {
     return {
       rows: [],
       errors: [],
@@ -139,16 +145,22 @@ export function parseProductImport(text: string): {
       warnings.push({ row, message: `„${label}“ hat einen unlesbaren Verfügbar-Wert. Es gilt verfügbar.` });
     }
 
-    const rawImages = splitImages(cell(cells, columns.get("imageUrls"))).flatMap((value) => {
+    const seenImages = new Set<string>();
+    const rawImages = imageColumns.flatMap((index) => splitImages(cell(cells, index))).flatMap((value) => {
       const url = safeExternalUrl(value);
 
-      if (url) return [url];
+      if (!url) {
+        warnings.push({
+          row,
+          message: `„${label}“ enthält einen Bildlink ohne http:// oder https://. Er wird ausgelassen.`,
+        });
+        return [];
+      }
 
-      warnings.push({
-        row,
-        message: `„${label}“ enthält einen Bildlink ohne http:// oder https://. Er wird ausgelassen.`,
-      });
-      return [];
+      if (seenImages.has(url)) return [];
+
+      seenImages.add(url);
+      return [url];
     });
     const brand = optionalText(cell(cells, columns.get("brand")));
     const category = optionalText(cell(cells, columns.get("category")));
@@ -290,10 +302,15 @@ function splitSizes(value: string) {
     .filter(Boolean);
 }
 
+function isImageHeader(name: string) {
+  if (HEADER_FIELDS[name as keyof typeof HEADER_FIELDS] === "imageUrls") return true;
+
+  return /^(bild|bilder|bildlink|foto|fotos|image|images|img)(_?\d+)?$/.test(name);
+}
+
 function splitImages(value: string) {
-  return value
-    .split(/\s*[|\n]\s*|\s*,\s*/)
-    .map((part) => part.trim())
+  return Array.from(value.matchAll(/https?:\/\/[\s\S]*?(?=https?:\/\/|$)/gi))
+    .map((match) => match[0].replace(/[\s,;|]+$/g, "").trim())
     .filter(Boolean);
 }
 

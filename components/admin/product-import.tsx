@@ -11,8 +11,6 @@ type ImportResult = {
   warnings: { row: number; name: string; message: string }[];
 };
 
-const BATCH = 40;
-
 export function ProductImport() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -20,11 +18,14 @@ export function ProductImport() {
   const [issues, setIssues] = useState<ImportIssue[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [uploadLabel, setUploadLabel] = useState<string | null>(null);
+  const [done, setDone] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [doneLinks, setDoneLinks] = useState(0);
+  const [totalLinks, setTotalLinks] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const withImages = rows.filter((row) => row.imageUrls.length > 0).length;
+  const imageLinks = rows.reduce((sum, row) => sum + row.imageUrls.length, 0);
 
   async function onFile(file: File | null) {
     setRows([]);
@@ -33,6 +34,10 @@ export function ProductImport() {
     setError(null);
     setResult(null);
     setFileName(file?.name ?? null);
+    setDone(0);
+    setTotal(0);
+    setDoneLinks(0);
+    setTotalLinks(0);
     if (fileRef.current) fileRef.current.value = "";
 
     if (!file) return;
@@ -51,16 +56,19 @@ export function ProductImport() {
 
     setPending(true);
     setError(null);
-    setUploadLabel(null);
+    setDone(0);
+    setTotal(rows.length);
+    setDoneLinks(0);
+    setTotalLinks(imageLinks);
 
     const created: ImportResult["created"] = [];
     const failed: ImportResult["failed"] = [];
     const warnings: ImportResult["warnings"] = [];
+    let finishedLinks = 0;
 
-    for (let index = 0; index < rows.length; index += BATCH) {
-      const slice = rows.slice(index, index + BATCH);
-      setUploadLabel(`Artikel ${Math.min(index + BATCH, rows.length)} von ${rows.length}`);
-      const response = await importProducts(slice);
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const response = await importProducts([row]);
 
       if ("error" in response && response.error && !("created" in response)) {
         setError(response.error);
@@ -72,10 +80,13 @@ export function ProductImport() {
         failed.push(...(response.failed ?? []));
         warnings.push(...(response.warnings ?? []));
       }
+
+      finishedLinks += row.imageUrls.length;
+      setDone(index + 1);
+      setDoneLinks(finishedLinks);
     }
 
     setResult({ created, failed, warnings });
-    setUploadLabel(null);
     setPending(false);
 
     if (created.length > 0) {
@@ -119,7 +130,7 @@ export function ProductImport() {
       {rows.length > 0 ? (
         <div className="mt-8">
           <p className="text-sm">
-            {rows.length} Artikel bereit, {withImages} mit Bildlinks
+            {rows.length} Artikel, {imageLinks} Bildlinks
             {issues.length > 0 ? `, ${issues.length} Hinweise` : ""}.
           </p>
           <ul className="mt-4 border-t border-neutral-200">
@@ -176,12 +187,26 @@ export function ProductImport() {
         </div>
       ) : null}
 
+      {pending || done > 0 ? (
+        <div className="mt-8">
+          <div className="h-1 bg-neutral-200">
+            <div
+              className="h-full bg-black transition-[width] duration-300"
+              style={{ width: `${total === 0 ? 0 : Math.round((done / total) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-3 text-sm text-neutral-600">
+            Artikel {done} von {total} · Bildlinks {doneLinks} von {totalLinks}
+          </p>
+        </div>
+      ) : null}
+
       <button
         type="submit"
         disabled={pending || rows.length === 0}
         className="mt-8 inline-flex h-12 items-center justify-center bg-black px-6 text-[11px] font-medium uppercase tracking-[0.2em] text-white disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500"
       >
-        {uploadLabel ? uploadLabel : pending ? "Importiert…" : "Importieren"}
+        {pending ? `Artikel ${done} von ${total}` : "Importieren"}
       </button>
     </form>
   );
