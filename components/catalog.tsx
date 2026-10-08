@@ -49,8 +49,7 @@ export function Catalog({
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-
-    return products.filter((product) => {
+    const matches = products.filter((product) => {
       if (category && product.category !== category) return false;
       if (!needle) return true;
 
@@ -59,6 +58,8 @@ export function Catalog({
         .toLowerCase()
         .includes(needle);
     });
+
+    return category ? matches : mixProducts(matches);
   }, [products, query, category]);
 
   function syncUrl(nextQuery: string, nextCategory: string) {
@@ -136,6 +137,39 @@ export function Catalog({
       )}
     </section>
   );
+}
+
+function mixProducts(products: Product[]) {
+  const remaining = [...products];
+  const mixed: Product[] = [];
+
+  while (remaining.length > 0) {
+    const previous = mixed[mixed.length - 1];
+    const recentBrands = new Set(mixed.slice(-4).map((item) => item.brand ?? ""));
+    const recentCategories = new Set(mixed.slice(-4).map((item) => item.category ?? ""));
+    let bestIndex = 0;
+    let bestScore = -1;
+
+    remaining.forEach((product, index) => {
+      const brand = product.brand ?? "";
+      const categoryName = product.category ?? "";
+      let score = 0;
+
+      if (!previous || brand !== (previous.brand ?? "")) score += 4;
+      if (!previous || categoryName !== (previous.category ?? "")) score += 2;
+      if (!recentBrands.has(brand)) score += 1;
+      if (!recentCategories.has(categoryName)) score += 1;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    });
+
+    mixed.push(remaining.splice(bestIndex, 1)[0]);
+  }
+
+  return mixed;
 }
 
 function CategoryButton({
