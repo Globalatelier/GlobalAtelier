@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { largerImageCandidates } from "@/lib/images";
 
 export const CLOUDINARY_FOLDER = "global-atelier";
 
@@ -56,21 +57,39 @@ export function createUploadSignature() {
   };
 }
 
-export async function uploadRemoteImage(
-  sourceUrl: string,
-): Promise<{ image: { publicId: string; url: string } } | { error: string }> {
-  let parsed: URL;
+type RemoteUpload =
+  | { image: { publicId: string; url: string }; width: number }
+  | { error: string };
 
+async function imageByteLength(url: string) {
   try {
-    parsed = new URL(sourceUrl.trim());
+    const response = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return 0;
+
+    const type = response.headers.get("content-type") ?? "";
+    if (
+      type &&
+      !type.startsWith("image/") &&
+      !type.startsWith("application/octet-stream")
+    ) {
+      return 0;
+    }
+
+    const length = Number(response.headers.get("content-length") || 0);
+    return Number.isFinite(length) && length > 0 ? length : 1;
   } catch {
-    return { error: "Ein Bildlink ist ungültig." };
+    return 0;
   }
+}
 
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    return { error: "Ein Bildlink ist ungültig." };
-  }
-
+async function postRemoteImage(
+  fileUrl: string,
+  hostname: string,
+): Promise<RemoteUpload> {
   const config = cloudinaryConfig();
 
   if (!config) {
@@ -84,7 +103,7 @@ export async function uploadRemoteImage(
   );
   const body = new FormData();
 
-  body.append("file", parsed.toString());
+  body.append("file", fileUrl);
   body.append("folder", CLOUDINARY_FOLDER);
   body.append("timestamp", String(timestamp));
   body.append("api_key", config.apiKey);
@@ -98,6 +117,7 @@ export async function uploadRemoteImage(
     const payload = (await response.json().catch(() => null)) as {
       public_id?: string;
       secure_url?: string;
+      width?: number;
       error?: { message?: string };
     } | null;
 
@@ -107,7 +127,7 @@ export async function uploadRemoteImage(
       !payload.secure_url ||
       !isSafePublicId(payload.public_id)
     ) {
-      return { error: `Bild von ${parsed.hostname} konnte nicht übernommen werden.` };
+      return { error: `Bild von ${hostname} konnte nicht übernommen werden.` };
     }
 
     return {
@@ -115,10 +135,53 @@ export async function uploadRemoteImage(
         publicId: payload.public_id,
         url: payload.secure_url,
       },
+      width: payload.width ?? 0,
     };
   } catch {
-    return { error: `Bild von ${parsed.hostname} konnte nicht übernommen werden.` };
+    return { error: `Bild von ${hostname} konnte nicht übernommen werden.` };
   }
+}
+
+export async function uploadRemoteImage(
+  sourceUrl: string,
+): Promise<RemoteUpload> {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(sourceUrl.trim());
+  } catch {
+    return { error: "Ein Bildlink ist ungültig." };
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return { error: "Ein Bildlink ist ungültig." };
+  }
+
+  const candidates = largerImageCandidates(parsed.toString()).filter((url) => {
+    try {
+      const candidate = new URL(url);
+      return candidate.protocol === "https:" || candidate.protocol === "http:";
+    } catch {
+      return false;
+    }
+  });
+  const lengths = await Promise.all(candidates.map((url) => imageByteLength(url)));
+  const ranked = candidates
+    .map((url, index) => ({ url, length: lengths[index] ?? 0 }))
+    .sort((left, right) => right.length - left.length);
+  const original = candidates[candidates.length - 1] ?? parsed.toString();
+  const preferred = ranked.find((item) => item.length > 0)?.url ?? candidates[0] ?? original;
+  const uploaded = await postRemoteImage(preferred, parsed.hostname);
+
+  if ("error" in uploaded) {
+    if (preferred === original) return uploaded;
+    return postRemoteImage(original, parsed.hostname);
+  }
+
+  if (uploaded.width >= 800 || preferred === original) return uploaded;
+
+  await destroyCloudinaryImage(uploaded.image.publicId);
+  return postRemoteImage(original, parsed.hostname);
 }
 
 export async function destroyCloudinaryImage(publicId: string) {

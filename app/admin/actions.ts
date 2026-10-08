@@ -141,6 +141,14 @@ export async function importProducts(rows: ImportDraft[]) {
       }
 
       images.push(uploaded.image);
+
+      if (uploaded.width > 0 && uploaded.width < 800) {
+        warnings.push({
+          row: rowNumber,
+          name,
+          message: "Der Bildlink ist nur eine kleine Vorschau. Das Bild bleibt unscharf.",
+        });
+      }
     }
 
     const sanitized = sanitizeProductInput({
