@@ -98,9 +98,9 @@ export function ProductImport() {
   return (
     <form onSubmit={onSubmit} className="max-w-2xl">
       <p className="max-w-xl text-sm leading-relaxed text-neutral-600">
-        Eine CSV-Datei. Jedes Feld kann leer bleiben. Bildlinks stehen in der Spalte Bilder,
-        mehrere Links mit Komma oder Senkrechtstrich trennen. Bis zu 600 Artikel, acht Bilder
-        pro Artikel. Der erste Link wird das Hauptbild.
+        Eine CSV-Datei. Jedes Feld kann leer bleiben. Bis zu sechs Bildlinks pro Artikel,
+        in der Spalte Bilder oder in den Spalten Bild 1 bis Bild 6. Mehrere Links in einer
+        Zelle mit Komma trennen. Bis zu 600 Artikel. Der erste Link wird das Hauptbild.
       </p>
       <p className="mt-4 text-[11px] uppercase leading-relaxed tracking-[0.14em] text-neutral-500">
         Name, Originalpreis, Unser Preis, Herstellerlink, Marke, Kategorie, Größen, Bilder, Verfügbar

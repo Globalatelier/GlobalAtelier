@@ -70,11 +70,21 @@ export function parseProductImport(text: string): {
   const columns = new Map<Field, number>();
   const imageColumns: number[] = [];
 
+  const imageColumnSet = new Set<number>();
+
   header.forEach((name, index) => {
-    if (isImageHeader(name)) {
-      imageColumns.push(index);
-      return;
-    }
+    if (isImageHeader(name)) imageColumnSet.add(index);
+  });
+
+  for (let index = 1; index < header.length; index += 1) {
+    if (header[index] === "" && imageColumnSet.has(index - 1)) imageColumnSet.add(index);
+  }
+
+  imageColumnSet.forEach((index) => imageColumns.push(index));
+  imageColumns.sort((a, b) => a - b);
+
+  header.forEach((name, index) => {
+    if (imageColumnSet.has(index)) return;
 
     const field = HEADER_FIELDS[name as keyof typeof HEADER_FIELDS];
 
@@ -303,9 +313,10 @@ function splitSizes(value: string) {
 }
 
 function isImageHeader(name: string) {
+  if (!name) return false;
   if (HEADER_FIELDS[name as keyof typeof HEADER_FIELDS] === "imageUrls") return true;
 
-  return /^(bild|bilder|bildlink|foto|fotos|image|images|img)(_?\d+)?$/.test(name);
+  return /bild|foto|image|abbildung|(?:^|_)img(?:_|\d|$)/.test(name);
 }
 
 function splitImages(value: string) {
